@@ -422,7 +422,7 @@ class Task2(Node):
         if self.ttbot_pose is None or self.goal_pose is None or not self.path.poses:
             return
 
-        self.get_logger().info(f"Loop running in state: {self.state}")
+        #self.get_logger().info(f"Loop running in state: {self.state}")
         
 
         if self.state == 'OBSTACLE_AVOIDANCE':
