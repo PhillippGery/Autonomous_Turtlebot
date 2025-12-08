@@ -67,9 +67,10 @@ class Task1(Node):
         self.rejected_goals_grid = [] # List to store rejected goal grid coordinates
         self.Frotier_Counter = 0
         self.Frontier_W_dist = 1.0
-        self.Frontier_W_power = 10.0 
-        self.min_frontier_distance = 0.5  # meters
+        self.Frontier_W_power = 5.0 
+        self.min_frontier_distance = 0.6  # meters
         self.search_radius_cells = 7  # cells
+        self.min_free_neighbors_for_frontier = 3  # Minimum free neighbors required for a frontier cell
 
         self.inflation_kernel_size = 5
         self.max_dist_alternate_Ponit = 1.5  # if start or stop pose is not valid, search for alternate point within this distance (meters)
@@ -511,6 +512,12 @@ class Task1(Node):
             # Check if we have reached the final goal position and orientation
             self.Check_alingment_Goal( final_goal_pose)
 
+        elif self.state == 'STRAIGHT_MOVING':
+            # Continue moving straight until obstacle is cleared
+            if self.obstacle_state == 'CLEAR':
+                self.move_ttbot(0.15, 0.0) # Move forward at a safe speed
+            
+        
         else:
             self.get_logger().warn(f"Unknown state: {self.state}. Stopping robot for safety.")
             #self.state = 'IDLE'
@@ -787,7 +794,7 @@ class Task1(Node):
             # Call the external helper method from SLAMMapProcessor
             self.map_processor._inflate_obstacle(
                 inflation_kernel_matrix, 
-                self.map_processor.inf_map_img_array, # Inflate the final costmap array
+                self.map_processor.inf_map_img_array, 
                 i, j, 
                 absolute=True
             )
@@ -823,31 +830,34 @@ class Task1(Node):
         # Define neighbor offsets (8 directions)
         neighbors = [(-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1)]
 
-        # Iterate over the map, avoiding the strict edges
+        MIN_FREE_NEIGHBORS = self.min_free_neighbors_for_frontier  
+
         for i in range(1, H - 1):
             for j in range(1, W - 1):
                 
-                # Check 1: Is the current cell FREE (0)?
-                if raw_data[i, j] == 0:
+                if raw_data[i, j] == 0: # Check 1: Is the current cell FREE (0)?
                     
                     unknown_neighbor_count = 0
+                    free_neighbor_count = 0 # NEW: Counter for known/free neighbors
                     is_frontier = False
                     
-                    # Check 2: Count UNKNOWN cells (-1) in the 8 neighbors
+                    # Check 2: Count UNKNOWN (-1) and FREE (0) neighbors
                     for di, dj in neighbors:
-                        # Safety check is already built into the loop bounds (1 to H-1, 1 to W-1), 
-                        # but we check the bounds explicitly for the neighbor index just in case.
                         if 0 <= i + di < H and 0 <= j + dj < W:
+                            neighbor_value = raw_data[i + di, j + dj]
                             
-                            if raw_data[i + di, j + dj] == -1:
+                            if neighbor_value == -1:
                                 is_frontier = True
                                 unknown_neighbor_count += 1
-                    
-                    if is_frontier:
+                            elif neighbor_value == 0:
+                                # Count adjacent known/free cells
+                                free_neighbor_count += 1 
+                                
+                    if is_frontier and free_neighbor_count >= MIN_FREE_NEIGHBORS: # ⚠️ NEW THRESHOLD CHECK
                         # Append the coordinates and the count of unknown neighbors
                         frontiers.append((i, j, unknown_neighbor_count))
                         
-        return frontiers # Returns a list of (row, col, count) tuples
+        return frontiers
 
     def _select_and_set_goal(self, frontier_points):
         """
@@ -924,9 +934,14 @@ class Task1(Node):
             
         else:
 
-            #if still frontierl left go straight to explored
-            if len(frontier_points) == 0:
-                self.get_logger().warn("Exploration Complete: No reachable frontier nodes found.")
+            #if less then 1% of the map is unknown consider exploration complete
+            total_cells = self.raw_map_data_array.size
+            unknown_cells = np.sum(self.raw_map_data_array == -1)
+            unknown_percentage = (unknown_cells / total_cells) * 100.0
+
+            self.get_logger().info(f"Unknown Map Percentage: {unknown_percentage:.2f}%")
+            if unknown_percentage < 1.0:
+                self.get_logger().warn("Exploration Complete: Less than 1% of the map is unknown.")
                 # print exproation time
                 time = (self.get_clock().now().nanoseconds*1e-9 - self.exploration_start_time)/60.0
                 self.get_logger().info(f"Total Exploration Time: {time:.2f} minutes")
@@ -935,7 +950,8 @@ class Task1(Node):
             else:
                 self.get_logger().info("No valid frontier goal found. All candidates rejected or unreachable.")
                 self.get_logger().info("Moving TTBot forward to explore further.")
-                self.move_ttbot(0.1, 0.0)
+                self.state = 'STRAIGHT_MOVING'
+                
 
     def _calculate_local_area_gain(self, i, j):
         """
