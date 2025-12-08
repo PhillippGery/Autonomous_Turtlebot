@@ -37,7 +37,6 @@ class Task2(Node):
         self.goal_pose = None
         self.ttbot_pose = None
         self.start_time = 0.0
-        self.get_logger().info("Graph built successfully.")
 
         self.state = 'IDLE'  # Possible states: IDLE, ASTARPATH_FOLLOWING, OBSTACLE_AVOIDANCE
 
@@ -78,7 +77,7 @@ class Task2(Node):
         # Speed and tolerance settings
         self.speed_max = 0.31
         self.rotspeed_max = 1.9
-        self.goal_tolerance = 0.2
+        self.goal_tolerance = 0.1
         self.align_threshold = 0.4
 
         self.last_commanded_speed = 0.0
@@ -372,14 +371,6 @@ class Task2(Node):
             alpha += 2 * math.pi
         
         beta = -robot_theta - alpha
-
-        # If we are very close to the goal, stop the robot to prevent overshoot.
-        if rho < 0.05: # 5 cm tolerance
-            return 0.0, 0.0
-
-        # 5. Apply the Control Law 
-        # v = k_rho * rho
-        # omega = k_alpha * alpha + k_beta * beta
         
         p_term = self.kp_angular * alpha
         
@@ -628,7 +619,7 @@ class Task2(Node):
             R_obs = self.obstacle_inflation_radius_m
             distance_to_center = front_dist + R_obs
             
-            # Use distance_to_center to project the obstacle center's world coordinates
+            # calculate obstacle position in world frame
             obs_world_x = self.ttbot_pose.pose.position.x + distance_to_center * math.cos(robot_theta)
             obs_world_y = self.ttbot_pose.pose.position.y + distance_to_center * math.sin(robot_theta)
             
