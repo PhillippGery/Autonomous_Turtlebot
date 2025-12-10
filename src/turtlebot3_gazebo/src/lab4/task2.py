@@ -48,7 +48,7 @@ class Task2(Node):
         self.declare_parameter('map_yaml_path', default_map_path)
 
         # 3. Get the value of the parameter from the launch file (or use the default)
-        map_yaml_path = self.get_parameter('map_yaml_path').get_parameter_value().string_value
+        self.map_yaml_path = self.get_parameter('map_yaml_path').get_parameter_value().string_value
 
         #Obstacle avoidance variables
         self.obstacle_state = 'CLEAR'
@@ -88,8 +88,8 @@ class Task2(Node):
         self.use_line_of_sight_check = True # Enable line-of-sight shortcut checking
         self.shortcut_active = False #if a shortcut is being taken true
 
-        self.get_logger().info(f"Loading map from '{map_yaml_path}' and building graph...")
-        self.map_processor = MapProcessor(map_yaml_path)
+        self.get_logger().info(f"Loading map from '{self.map_yaml_path}' and building graph...")
+        self.map_processor = MapProcessor(self.map_yaml_path)
         inflation_kernel = self.map_processor.rect_kernel(self.inflation_kernel_size, 1)
         self.map_processor.inflate_map(inflation_kernel)
         
@@ -154,7 +154,6 @@ class Task2(Node):
         pose_stamped.header = data.header
         pose_stamped.pose = data.pose.pose
         self.ttbot_pose = pose_stamped
-       
 
     def a_star_path_planner(self, start_pose, end_pose):
         """! A Start path planner. """
@@ -528,6 +527,11 @@ class Task2(Node):
                 self.goal_pose = None
                 self.last_commanded_speed = 0.0
                 self.state = 'IDLE'
+                self.map_processor = MapProcessor(self.map_yaml_path)
+                inflation_kernel = self.map_processor.rect_kernel(self.inflation_kernel_size, 1)
+                self.map_processor.inflate_map(inflation_kernel)                
+                self.map_processor.get_graph_from_map()
+                self._publish_inflated_map()
                 return
             else:
                 # ALIGNING: Position is correct, so stop moving and only rotate.
@@ -757,16 +761,38 @@ class Task2(Node):
 
 
         center_index = int((idx_start + idx_end) / 2)
-        angle_from_robot_centerline = center_index * self.scan_msg.angle_increment + self.scan_msg.angle_min
+        
 
-        if abs(angle_from_robot_centerline) > math.radians(18) and self.obstacle_state == 'ALIGNING_TO_OBS':
+        raw_angle = center_index * self.scan_msg.angle_increment + self.scan_msg.angle_min
 
+        angle_from_robot_centerline = raw_angle
+        
+        # Normalize to [-pi, pi] to ensure shortest signed angle
+        if angle_from_robot_centerline > math.pi:
+            angle_from_robot_centerline -= 2 * math.pi
+        elif angle_from_robot_centerline < -math.pi:
+            angle_from_robot_centerline += 2 * math.pi
+
+        
+        if abs(angle_from_robot_centerline) > math.radians(45)  and self.obstacle_state == 'ALIGNING_TO_OBS':
+            self.move_ttbot(0.0, 0.0)
+            if self.goal_pose is not None:
+            #self.path = self.a_star_path_planner(self.ttbot_pose, self.goal_pose)
+                self.__goal_pose_cbk(self.goal_pose)
+                if self.path.poses:
+                    self.get_logger().info("Replanning successful. Resuming path following.")
+                    self.path_pub.publish(self.path)
+                    self.current_path_idx = 0
+                    self.obstacle_state = 'CLEAR'
+
+        elif abs(angle_from_robot_centerline) > math.radians(18) and self.obstacle_state == 'ALIGNING_TO_OBS':
             angular_speed = self.kp_final_yaw * angle_from_robot_centerline
             angular_speed = np.clip(angular_speed, -self.rotspeed_max, self.rotspeed_max)
             self.move_ttbot(0.0, angular_speed)
             #self.get_logger().info(f"Rotating to align with obstacle")
-            #self.get_logger().info(f"Angle to obstacle: {math.degrees(angle_from_robot_centerline):.2f} degrees")
+            self.get_logger().info(f"Angle to obstacle: {math.degrees(angle_from_robot_centerline):.2f} degrees")
             return
+            
         else:
             self.move_ttbot(0.0, 0.0)
             self.get_logger().info(f"Aligned with obstacle. Calculating position.")
