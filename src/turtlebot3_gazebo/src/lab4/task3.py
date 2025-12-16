@@ -43,7 +43,7 @@ class Task3(Node):
 
         # Map variables
         pkg_share_path = get_package_share_directory('turtlebot3_gazebo')
-        default_map_path = os.path.join(pkg_share_path, 'maps', 'Map.yaml')
+        default_map_path = os.path.join(pkg_share_path, 'maps', 'map.yaml')
         self.declare_parameter('map_yaml_path', default_map_path)
         self.map_yaml_path = self.get_parameter('map_yaml_path').get_parameter_value().string_value
 

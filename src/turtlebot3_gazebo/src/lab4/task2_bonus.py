@@ -42,7 +42,7 @@ class Task2(Node):
 
 
         pkg_share_path = get_package_share_directory('turtlebot3_gazebo')
-        default_map_path = os.path.join(pkg_share_path, 'maps', 'Map.yaml')
+        default_map_path = os.path.join(pkg_share_path, 'maps', 'map.yaml')
 
         # 2. Declare the 'map_yaml_path' parameter with the default value
         self.declare_parameter('map_yaml_path', default_map_path)
@@ -1323,7 +1323,7 @@ class RRTStarGrid:
         while True:
             y = random.randint(0, self.height - 1)
             x = random.randint(0, self.width - 1)
-            if self.map_array[y, x] == 0:  # Check if it's free space (0)
+            if self.map_array[y, x] == 0:  
                 return y, x
 
     def _find_nearest_node(self, y_rand, x_rand):
@@ -1359,7 +1359,6 @@ class RRTStarGrid:
         
         name_new = self._get_node_name(y_new, x_new)
         
-        # Check if the path to the new node is collision-free (reuse Bresenham logic)
         if self.map_array[y_new, x_new] == 0 and self.node_instance._is_path_clear((y_near, x_near), (y_new, x_new)):
             return name_new, y_new, x_new
         return None, None, None
@@ -1387,7 +1386,6 @@ class RRTStarGrid:
             if name_near == name_new:
                 continue
 
-            # Cost if 'name_new' becomes the parent of 'name_near'
             cost_through_new = cost_new + dist_to_near
 
             if cost_through_new < self.nodes[name_near]['cost']:
@@ -1424,7 +1422,6 @@ class RRTStarGrid:
         start_name = self._get_node_name(*start_grid)
         end_name = self._get_node_name(*end_grid)
         
-        # 1. Initialize the tree with the start node
         self.nodes = {
             start_name: {'parent': None, 'cost': 0.0}
         }
@@ -1438,23 +1435,23 @@ class RRTStarGrid:
         # 
 
         for i in range(self.max_iterations):
-            # 2. Sample Free Space
+            # Sample Free Space
             y_rand, x_rand = self._sample_free()
             
-            # 3. Find Nearest Node
+            # Find Nearest Node
             name_nearest = self._find_nearest_node(y_rand, x_rand)
             if name_nearest is None:
                 continue
             
-            # 4. Steer (Create new node if path is collision-free)
+            # Steer (Create new node if path is collision-free)
             name_new, y_new, x_new = self._steer(name_nearest, y_rand, x_rand)
             if name_new is None or name_new in self.nodes:
                 continue
             
-            # 5. Find Near Nodes
+            # Find Near Nodes
             near_nodes = self._find_near_nodes(y_new, x_new)
             
-            # 6. Choose Best Parent (Connect new node to the best parent)
+            # Choose Best Parent (Connect new node to the best parent)
             cost_min = self.nodes[name_nearest]['cost'] + self.step_size # Base cost from nearest node
             parent_name = name_nearest
             
@@ -1469,13 +1466,13 @@ class RRTStarGrid:
                     cost_min = cost_through_near
                     parent_name = name_near
 
-            # 7. Add New Node to Tree
+            # Add New Node to Tree
             self.nodes[name_new] = {'parent': parent_name, 'cost': cost_min}
             
-            # 8. Rewire (Optimize paths of neighbors through the new node)
+            # Rewire (Optimize paths of neighbors through the new node)
             self.rewire(name_new, near_nodes)
             
-            # 9. Check if the new node is close enough to the goal
+            # Check if the new node is close enough to the goal
             dist_to_goal = math.sqrt((x_new - end_grid[1])**2 + (y_new - end_grid[0])**2)
             if dist_to_goal < self.step_size and self.node_instance._is_path_clear((y_new, x_new), end_grid):
                 

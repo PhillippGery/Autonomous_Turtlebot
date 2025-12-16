@@ -42,7 +42,7 @@ class Task2(Node):
 
 
         pkg_share_path = get_package_share_directory('turtlebot3_gazebo')
-        default_map_path = os.path.join(pkg_share_path, 'maps', 'Map.yaml')
+        default_map_path = os.path.join(pkg_share_path, 'maps', 'map.yaml')
 
         # 2. Declare the 'map_yaml_path' parameter with the default value
         self.declare_parameter('map_yaml_path', default_map_path)
